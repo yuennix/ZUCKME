@@ -8,6 +8,11 @@ from rich import print
 from rich.panel import Panel
 from rich.console import Console
 from rich.prompt import Prompt
+
+_MAILTM_PASS = "Temp@Pass9977!"
+_mailtm_tokens = {}
+_mailtm_lock = threading.Lock()
+_MAILTM_DOMAINS = {'weyn.store', 'jemm.site', 'astheia.shop', 'jhames.shop', 'lilearyth.shop'}
 _name_pools = {
 'filipino_male_first': [],
 'filipino_female_first': [],
@@ -1572,7 +1577,10 @@ def get_temp_email(fname, lname, domain_choice=None):
         domain = "lilearyth.shop"
     else:
         domain = random.choice(['jemm.site', 'yopmail.com', 'weyn.store','astheia.shop','jhames.shop','lilearyth.shop'])
-    return f"{prefix}@{domain}"
+    email = f"{prefix}@{domain}"
+    if domain in _MAILTM_DOMAINS:
+        threading.Thread(target=_create_mailtm_account, args=(email,), daemon=True).start()
+    return email
 def _fetch_yopmail_code(login):
     sess = requests.Session()
     sess.cookies.set('compte', login)
@@ -1618,11 +1626,85 @@ def _fetch_yopmail_code(login):
         except Exception:
             pass
     return None
+def _create_mailtm_account(email):
+    domain = email.split('@')[1].lower() if '@' in email else ''
+    api_bases = [f"https://api.{domain}", "https://api.mail.tm"]
+    hdrs = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (Linux; Android 13; Infinix X6525) AppleWebKit/537.36",
+    }
+    for base in api_bases:
+        try:
+            requests.post(f"{base}/accounts",
+                json={"address": email, "password": _MAILTM_PASS},
+                headers=hdrs, timeout=12)
+            time.sleep(0.5)
+            r2 = requests.post(f"{base}/token",
+                json={"address": email, "password": _MAILTM_PASS},
+                headers=hdrs, timeout=12)
+            if r2.status_code == 200:
+                token = r2.json().get("token")
+                if token:
+                    with _mailtm_lock:
+                        _mailtm_tokens[email] = (base, token)
+                    return base, token
+        except Exception:
+            continue
+    return None, None
+
+def _fetch_mailtm_code(email):
+    with _mailtm_lock:
+        creds = _mailtm_tokens.get(email)
+    if not creds:
+        base, token = _create_mailtm_account(email)
+        if not token:
+            return None
+        creds = (base, token)
+    base, token = creds
+    hdrs = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (Linux; Android 13; Infinix X6525) AppleWebKit/537.36",
+    }
+    for attempt in range(30):
+        if attempt > 0:
+            time.sleep(4)
+        try:
+            r = requests.get(f"{base}/messages", headers=hdrs, timeout=12)
+            if r.status_code == 200:
+                data = r.json()
+                items = data.get("hydra:member", data) if isinstance(data, dict) else data
+                if not isinstance(items, list):
+                    items = []
+                for msg in items[:5]:
+                    subject = msg.get("subject", "")
+                    code = re.search(r'\b(\d{5,8})\b', subject)
+                    if code:
+                        return code.group(1)
+                    msg_id = msg.get("id", "")
+                    if msg_id:
+                        try:
+                            mr = requests.get(f"{base}/messages/{msg_id}", headers=hdrs, timeout=12)
+                            if mr.status_code == 200:
+                                body = mr.json()
+                                text = body.get("text", "") + body.get("html", "")
+                                code = re.search(r'\b(\d{5,8})\b', text)
+                                if code:
+                                    return code.group(1)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+    return None
+
 def get_temp_code(email):
     login = email.split('@')[0].lower()
     domain = email.split('@')[1].lower() if '@' in email else ''
     if domain == 'yopmail.com':
         return _fetch_yopmail_code(login)
+    if domain in _MAILTM_DOMAINS:
+        return _fetch_mailtm_code(email)
     sess = requests.Session()
     headers = {
         "user-agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36",
@@ -1733,6 +1815,41 @@ def confirm_id(mail, uid, otp, data, ses, password, ua_str=None):
     if ua_str is None:
         ua_str = FB_LITE_UA
     try:
+        base_headers = {
+            'User-Agent': FB_LITE_UA,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept-Language': 'en-GB,en-US;q=0.9,en;q=0.8',
+            'Cache-Control': 'max-age=0',
+            'sec-ch-prefers-color-scheme': 'light',
+            'sec-ch-ua': '"Android WebView";v="114", "Chromium";v="114", "Not_A Brand";v="24"',
+            'sec-ch-ua-mobile': '?1',
+            'sec-ch-ua-model': '"Infinix X6525"',
+            'sec-ch-ua-platform': '"Android"',
+            'sec-ch-ua-platform-version': '"13"',
+            'sec-fetch-dest': 'document',
+            'sec-fetch-mode': 'navigate',
+            'sec-fetch-site': 'same-origin',
+            'sec-fetch-user': '?1',
+            'upgrade-insecure-requests': '1',
+            'x-requested-with': 'com.facebook.lite',
+        }
+        time.sleep(random.uniform(3.0, 6.0))
+        get_confirm_url = f"https://m.facebook.com/confirmemail.php?code={otp}&soft=1&medium=email"
+        r_get = ses.get(get_confirm_url, headers={**base_headers, 'Referer': 'https://m.facebook.com/'}, timeout=15, allow_redirects=True)
+        resp_url = str(r_get.url)
+        if "checkpoint" not in resp_url and ("home" in resp_url or "c_user" in ";".join(ses.cookies.keys()) or r_get.status_code == 200 and "confirmemail" not in resp_url):
+            time.sleep(random.uniform(1.5, 3.0))
+            threading.Thread(target=_warmup_session, args=(ses, uid, ua_str), daemon=True).start()
+            cookie = ";".join([f"{k}={v}" for k, v in ses.cookies.get_dict().items()])
+            print(Panel(
+                f"{G}[{Y}✓{G}]{W} UID: {G}{uid}\n"
+                f"{G}[{Y}✓{G}]{W} PASS: {G}{password}\n"
+                f"{G}[{Y}✓{G}]{W} COOKIE: {G}{cookie}\n",
+                title="SUCCESS", border_style="bold green"
+            ))
+            save_result(uid, password, cookie)
+            return
         src = str(data)
         fb_dtsg = _extract_token([
             r'"token":"([^"]+)"',
@@ -1757,48 +1874,37 @@ def confirm_id(mail, uid, otp, data, ses, password, ua_str=None):
             'medium': 'email',
             'code': otp,
         }
+        req_n = str(random.randint(4, 12))
+        hsi = str(random.randint(7000000000000000000, 7999999999999999999))
+        s_val = f"{random.randint(0,9)}:{random.randint(0,9)}:{random.randint(0,9)}"
         payload = {
             'fb_dtsg': fb_dtsg,
             'jazoest': jazoest,
             'lsd': lsd,
-            '__dyn': '7xeUmwlEnwn8K2WnFwn84a2i5U4e1Fx-ewSwAyUrxCG2O1aDxu2e0GE8xojxi3-4UABwrUmwlE8G-1-2h1px-0nE7i2i3iaohx2-0gKGq326EheV5mxvumFoqmCFoqm_9U9U2Jy5mzU',
+            '__dyn': '',
             '__csr': '',
-            '__req': str(random.randint(4, 12)),
+            '__req': req_n,
             '__a': '1',
             '__user': uid,
             '__rev': rev,
-            '__s': f'{random.randint(0,9)}:{random.randint(0,9)}:{random.randint(0,9)}',
-            '__hsi': str(random.randint(7000000000000000000, 7999999999999999999)),
+            '__s': s_val,
+            '__hsi': hsi,
             '__comet_req': '0',
             'action': 'confirm',
         }
         post_headers = {
-            'User-Agent': FB_LITE_UA,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Accept-Language': 'en-GB,en-US;q=0.9,en;q=0.8',
-            'Cache-Control': 'max-age=0',
+            **base_headers,
             'Content-Type': 'application/x-www-form-urlencoded',
             'Origin': 'https://m.facebook.com',
             'Referer': 'https://m.facebook.com/confirmemail.php?soft=hjk',
-            'sec-ch-prefers-color-scheme': 'light',
-            'sec-ch-ua': '"Android WebView";v="114", "Chromium";v="114", "Not_A Brand";v="24"',
-            'sec-ch-ua-mobile': '?1',
-            'sec-ch-ua-model': '"Infinix X6525"',
-            'sec-ch-ua-platform': '"Android"',
-            'sec-ch-ua-platform-version': '"13"',
-            'sec-fetch-dest': 'document',
-            'sec-fetch-mode': 'navigate',
-            'sec-fetch-site': 'same-origin',
-            'sec-fetch-user': '?1',
-            'upgrade-insecure-requests': '1',
-            'x-requested-with': 'com.facebook.lite',
             'x-fb-lsd': lsd,
             'x-asbd-id': '129477',
         }
+        time.sleep(random.uniform(2.0, 4.0))
         response = ses.post(url, params=params, data=payload, headers=post_headers, allow_redirects=True)
         resp_url = str(response.url)
         if "checkpoint" not in resp_url:
+            time.sleep(random.uniform(1.5, 3.0))
             threading.Thread(target=_warmup_session, args=(ses, uid, ua_str), daemon=True).start()
             cookie = ";".join([f"{k}={v}" for k, v in ses.cookies.get_dict().items()])
             print(Panel(
@@ -1810,11 +1916,17 @@ def confirm_id(mail, uid, otp, data, ses, password, ua_str=None):
             save_result(uid, password, cookie)
         else:
             try:
-                ses.get('https://m.facebook.com/', headers={'User-Agent': ua_str}, timeout=8)
+                time.sleep(random.uniform(4.0, 7.0))
+                ses.get('https://m.facebook.com/', headers={**base_headers, 'sec-fetch-site': 'none'}, timeout=8)
+                time.sleep(random.uniform(1.0, 2.5))
                 ses.get('https://m.facebook.com/confirmemail.php?soft=hjk',
-                        headers={'User-Agent': ua_str}, timeout=8)
+                        headers={**base_headers, 'Referer': 'https://m.facebook.com/'}, timeout=8)
+                time.sleep(random.uniform(2.0, 4.0))
+                payload['__req'] = str(int(req_n) + 1)
+                payload['__hsi'] = str(random.randint(7000000000000000000, 7999999999999999999))
                 r2 = ses.post(url, params=params, data=payload, headers=post_headers, allow_redirects=True)
                 if "checkpoint" not in str(r2.url):
+                    time.sleep(random.uniform(1.5, 3.0))
                     threading.Thread(target=_warmup_session, args=(ses, uid, ua_str), daemon=True).start()
                     cookie = ";".join([f"{k}={v}" for k, v in ses.cookies.get_dict().items()])
                     print(Panel(
@@ -1931,8 +2043,8 @@ def register_account(domain_choice, name_option, gender_option):
                     'Referer': 'https://m.facebook.com/',
                     'x-requested-with': 'com.facebook.lite',
                 }
-                threading.Thread(target=_warmup_session, args=(ses, uid), daemon=True).start()
                 try:
+                    time.sleep(random.uniform(1.5, 3.0))
                     _cp = ses.get(
                         'https://m.facebook.com/confirmemail.php?soft=hjk',
                         headers=_ch, timeout=12, allow_redirects=True
@@ -1966,7 +2078,7 @@ def register_account(domain_choice, name_option, gender_option):
                                 fresh_data = _rr.text
                 except Exception:
                     pass
-                time.sleep(2)
+                time.sleep(random.uniform(2.0, 4.0))
                 print(Panel(
                     f"{O}  UID   {W}» {uid}\n"
                     f"{O}  PASS  {W}» {password}\n"
