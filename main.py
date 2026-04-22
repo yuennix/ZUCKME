@@ -1786,7 +1786,7 @@ def save_pending(uid, email, password):
 def _warmup_session(ses, uid, ua_str=None):
     warm_headers = {
         'User-Agent': FB_LITE_UA,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
         'Accept-Language': 'en-US,en;q=0.9',
         'Accept-Encoding': 'gzip, deflate, br',
         'Cache-Control': 'max-age=0',
@@ -1796,21 +1796,64 @@ def _warmup_session(ses, uid, ua_str=None):
         'sec-ch-ua-model': '"Infinix X6525"',
         'sec-ch-ua-platform': '"Android"',
         'sec-ch-ua-platform-version': '"13"',
+        'sec-ch-prefers-color-scheme': 'light',
         'sec-fetch-dest': 'document',
         'sec-fetch-mode': 'navigate',
-        'sec-fetch-site': 'none',
         'upgrade-insecure-requests': '1',
+        'dpr': '2.0',
+        'viewport-width': '720',
     }
-    pages = [
-        'https://m.facebook.com/',
-        f'https://m.facebook.com/profile.php?id={uid}',
+    try:
+        ses.cookies.set('locale', 'en_US', domain='.facebook.com')
+        ses.cookies.set('wd', '720x1560', domain='.facebook.com')
+        ses.cookies.set('dpr', '2', domain='.facebook.com')
+    except Exception:
+        pass
+    browse_sequence = [
+        ('https://m.facebook.com/', 'none', None, (4.0, 7.0)),
+        (f'https://m.facebook.com/profile.php?id={uid}', 'same-origin', 'https://m.facebook.com/', (3.5, 6.5)),
+        ('https://m.facebook.com/friends/', 'same-origin', f'https://m.facebook.com/profile.php?id={uid}', (3.0, 5.5)),
+        ('https://m.facebook.com/notifications/', 'same-origin', 'https://m.facebook.com/friends/', (2.5, 5.0)),
+        ('https://m.facebook.com/', 'same-origin', 'https://m.facebook.com/notifications/', (3.0, 6.0)),
+        (f'https://m.facebook.com/profile.php?id={uid}', 'same-origin', 'https://m.facebook.com/', (2.5, 5.0)),
     ]
-    for url in pages:
+    last_ref = 'https://m.facebook.com/'
+    for url, fetch_site, referer, delay_range in browse_sequence:
         try:
-            ses.get(url, headers=warm_headers, timeout=8, allow_redirects=True)
-            time.sleep(random.uniform(0.3, 0.8))
+            h = {**warm_headers, 'sec-fetch-site': fetch_site}
+            if referer:
+                h['Referer'] = referer
+            else:
+                h['sec-fetch-site'] = 'none'
+            r = ses.get(url, headers=h, timeout=12, allow_redirects=True)
+            cur_url = str(r.url)
+            if 'checkpoint' in cur_url or 'login' in cur_url:
+                break
+            if 'privacy' in cur_url or 'consent' in cur_url or 'cookie' in cur_url.lower():
+                try:
+                    soup = BeautifulSoup(r.text, 'html.parser')
+                    fform = soup.find('form')
+                    if fform:
+                        action = fform.get('action', '')
+                        if action and not action.startswith('http'):
+                            action = 'https://m.facebook.com' + action
+                        fields = {
+                            inp.get('name'): inp.get('value', '')
+                            for inp in fform.find_all('input')
+                            if inp.get('name')
+                        }
+                        ph = {**warm_headers, 'sec-fetch-site': 'same-origin',
+                              'Origin': 'https://m.facebook.com',
+                              'Referer': cur_url,
+                              'Content-Type': 'application/x-www-form-urlencoded'}
+                        time.sleep(random.uniform(1.5, 3.0))
+                        ses.post(action or 'https://m.facebook.com/', data=fields, headers=ph, timeout=12, allow_redirects=True)
+                except Exception:
+                    pass
+            last_ref = cur_url
+            time.sleep(random.uniform(*delay_range))
         except Exception:
-            pass
+            time.sleep(random.uniform(1.0, 2.0))
 def confirm_id(mail, uid, otp, data, ses, password, ua_str=None):
     if ua_str is None:
         ua_str = FB_LITE_UA
@@ -1840,7 +1883,7 @@ def confirm_id(mail, uid, otp, data, ses, password, ua_str=None):
         resp_url = str(r_get.url)
         if "checkpoint" not in resp_url and ("home" in resp_url or "c_user" in ";".join(ses.cookies.keys()) or r_get.status_code == 200 and "confirmemail" not in resp_url):
             time.sleep(random.uniform(1.5, 3.0))
-            threading.Thread(target=_warmup_session, args=(ses, uid, ua_str), daemon=True).start()
+            _warmup_session(ses, uid, ua_str)
             cookie = ";".join([f"{k}={v}" for k, v in ses.cookies.get_dict().items()])
             print(Panel(
                 f"{G}[{Y}✓{G}]{W} UID: {G}{uid}\n"
@@ -1905,7 +1948,7 @@ def confirm_id(mail, uid, otp, data, ses, password, ua_str=None):
         resp_url = str(response.url)
         if "checkpoint" not in resp_url:
             time.sleep(random.uniform(1.5, 3.0))
-            threading.Thread(target=_warmup_session, args=(ses, uid, ua_str), daemon=True).start()
+            _warmup_session(ses, uid, ua_str)
             cookie = ";".join([f"{k}={v}" for k, v in ses.cookies.get_dict().items()])
             print(Panel(
                 f"{G}[{Y}✓{G}]{W} UID: {G}{uid}\n"
@@ -1927,7 +1970,7 @@ def confirm_id(mail, uid, otp, data, ses, password, ua_str=None):
                 r2 = ses.post(url, params=params, data=payload, headers=post_headers, allow_redirects=True)
                 if "checkpoint" not in str(r2.url):
                     time.sleep(random.uniform(1.5, 3.0))
-                    threading.Thread(target=_warmup_session, args=(ses, uid, ua_str), daemon=True).start()
+                    _warmup_session(ses, uid, ua_str)
                     cookie = ";".join([f"{k}={v}" for k, v in ses.cookies.get_dict().items()])
                     print(Panel(
                         f"{G}[{Y}✓{G}]{W} UID: {G}{uid}\n"
