@@ -1,4 +1,4 @@
-import os, re, time, json, random, threading
+import os, re, time, json, random, threading, uuid
 import requests
 from faker import Faker
 from fake_useragent import UserAgent
@@ -1590,9 +1590,9 @@ def _fetch_yopmail_code(login):
         "accept-language": "en-US,en;q=0.9",
         "referer": "https://yopmail.com/",
     }
-    for attempt in range(25):
+    for attempt in range(30):
         if attempt > 0:
-            time.sleep(3)
+            time.sleep(2)
         try:
             r = sess.get(
                 f"https://yopmail.com/mail.php?b={login}&to=inbox",
@@ -1667,9 +1667,9 @@ def _fetch_mailtm_code(email):
         "Accept": "application/json",
         "User-Agent": "Mozilla/5.0 (Linux; Android 13; Infinix X6525) AppleWebKit/537.36",
     }
-    for attempt in range(30):
+    for attempt in range(40):
         if attempt > 0:
-            time.sleep(4)
+            time.sleep(2)
         try:
             r = requests.get(f"{base}/messages", headers=hdrs, timeout=12)
             if r.status_code == 200:
@@ -1771,6 +1771,15 @@ FB_LITE_UA = (
     "FBMF/Infinix;FBBD/Infinix;FBPN/com.facebook.lite;FBDV/Infinix X6525;"
     "FBSV/13;FBOP/1;FBCA/arm64-v8a:armeabi-v7a:armeabi;]"
 )
+CHROME_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+)
+_REG_DYN = (
+    "7xeUmwlEnwn8K2Wmh0no6u5U4e0yoW3q32360CEbo1nEhw2nVE4W099w8G1Dz81s8hw"
+    "GwQw9m1YwBgao6C0Mo2swaOfK0EUjwGzE2ZwNwmE2eUlwhE2Lw6OyES1Tw8W0Lo6-1Fw"
+    "4mwr86C1nwqU8XwnqwIwtU1fE0Vy3mdw"
+)
 _ALL_UAS = [FB_LITE_UA]
 def _extract_token(patterns, text):
     for p in patterns:
@@ -1783,173 +1792,162 @@ def save_pending(uid, email, password):
     with _save_lock:
         with open(os.path.join(_ZUYAN_DIR, "PENDING-CONFIRM.txt"), "a") as f:
             f.write(f"{uid}|{email}|{password}\n")
-def _warmup_session(ses, uid, ua_str=None):
+def _warmup_session(ses, uid):
     warm_headers = {
-        'User-Agent': FB_LITE_UA,
+        'User-Agent': CHROME_UA,
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'max-age=0',
-        'x-requested-with': 'com.facebook.lite',
-        'sec-ch-ua': '"Android WebView";v="114", "Chromium";v="114", "Not_A Brand";v="24"',
-        'sec-ch-ua-mobile': '?1',
-        'sec-ch-ua-model': '"Infinix X6525"',
-        'sec-ch-ua-platform': '"Android"',
-        'sec-ch-ua-platform-version': '"13"',
-        'sec-ch-prefers-color-scheme': 'light',
+        'Accept-Language': 'en-US,en;q=0.9,fil-PH;q=0.8,fil;q=0.7',
+        'Accept-Encoding': 'gzip, deflate',
+        'dpr': '1.25',
+        'viewport-width': '767',
+        'sec-ch-ua': '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-ch-ua-platform-version': '"19.0.0"',
+        'sec-ch-ua-model': '""',
+        'sec-ch-prefers-color-scheme': 'dark',
         'sec-fetch-dest': 'document',
         'sec-fetch-mode': 'navigate',
         'upgrade-insecure-requests': '1',
-        'dpr': '2.0',
-        'viewport-width': '720',
     }
-    try:
-        ses.cookies.set('locale', 'en_US', domain='.facebook.com')
-        ses.cookies.set('wd', '720x1560', domain='.facebook.com')
-        ses.cookies.set('dpr', '2', domain='.facebook.com')
-    except Exception:
-        pass
     browse_sequence = [
-        ('https://m.facebook.com/', 'none', None, (4.0, 7.0)),
-        (f'https://m.facebook.com/profile.php?id={uid}', 'same-origin', 'https://m.facebook.com/', (3.5, 6.5)),
-        ('https://m.facebook.com/friends/', 'same-origin', f'https://m.facebook.com/profile.php?id={uid}', (3.0, 5.5)),
-        ('https://m.facebook.com/notifications/', 'same-origin', 'https://m.facebook.com/friends/', (2.5, 5.0)),
-        ('https://m.facebook.com/', 'same-origin', 'https://m.facebook.com/notifications/', (3.0, 6.0)),
-        (f'https://m.facebook.com/profile.php?id={uid}', 'same-origin', 'https://m.facebook.com/', (2.5, 5.0)),
+        ('https://www.facebook.com/?caa_reg_splash_screen=1', 'same-origin', 'https://www.facebook.com/confirmemail.php?next=', (4.0, 7.0)),
+        (f'https://www.facebook.com/profile.php?id={uid}', 'same-origin', 'https://www.facebook.com/', (3.5, 6.5)),
+        ('https://www.facebook.com/friends/', 'same-origin', f'https://www.facebook.com/profile.php?id={uid}', (3.0, 5.5)),
+        ('https://www.facebook.com/notifications/', 'same-origin', 'https://www.facebook.com/friends/', (2.5, 5.0)),
+        ('https://www.facebook.com/', 'same-origin', 'https://www.facebook.com/notifications/', (3.0, 6.0)),
     ]
-    last_ref = 'https://m.facebook.com/'
     for url, fetch_site, referer, delay_range in browse_sequence:
         try:
-            h = {**warm_headers, 'sec-fetch-site': fetch_site}
-            if referer:
-                h['Referer'] = referer
-            else:
-                h['sec-fetch-site'] = 'none'
-            r = ses.get(url, headers=h, timeout=12, allow_redirects=True)
+            h = {**warm_headers, 'sec-fetch-site': fetch_site, 'Referer': referer}
+            r = ses.get(url, headers=h, timeout=14, allow_redirects=True)
             cur_url = str(r.url)
-            if 'checkpoint' in cur_url or 'login' in cur_url:
+            if 'checkpoint' in cur_url or ('login' in cur_url and 'facebook.com/login' in cur_url):
                 break
-            if 'privacy' in cur_url or 'consent' in cur_url or 'cookie' in cur_url.lower():
-                try:
-                    soup = BeautifulSoup(r.text, 'html.parser')
-                    fform = soup.find('form')
-                    if fform:
-                        action = fform.get('action', '')
-                        if action and not action.startswith('http'):
-                            action = 'https://m.facebook.com' + action
-                        fields = {
-                            inp.get('name'): inp.get('value', '')
-                            for inp in fform.find_all('input')
-                            if inp.get('name')
-                        }
-                        ph = {**warm_headers, 'sec-fetch-site': 'same-origin',
-                              'Origin': 'https://m.facebook.com',
-                              'Referer': cur_url,
-                              'Content-Type': 'application/x-www-form-urlencoded'}
-                        time.sleep(random.uniform(1.5, 3.0))
-                        ses.post(action or 'https://m.facebook.com/', data=fields, headers=ph, timeout=12, allow_redirects=True)
-                except Exception:
-                    pass
-            last_ref = cur_url
             time.sleep(random.uniform(*delay_range))
         except Exception:
             time.sleep(random.uniform(1.0, 2.0))
-def confirm_id(mail, uid, otp, data, ses, password, ua_str=None):
-    if ua_str is None:
-        ua_str = FB_LITE_UA
+def confirm_id(mail, uid, otp, ses, password):
+    """Confirm email via the new GraphQL CAA confirmation endpoint."""
     try:
-        base_headers = {
-            'User-Agent': FB_LITE_UA,
+        nav_headers = {
+            'User-Agent': CHROME_UA,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Accept-Language': 'en-GB,en-US;q=0.9,en;q=0.8',
-            'Cache-Control': 'max-age=0',
-            'sec-ch-prefers-color-scheme': 'light',
-            'sec-ch-ua': '"Android WebView";v="114", "Chromium";v="114", "Not_A Brand";v="24"',
-            'sec-ch-ua-mobile': '?1',
-            'sec-ch-ua-model': '"Infinix X6525"',
-            'sec-ch-ua-platform': '"Android"',
-            'sec-ch-ua-platform-version': '"13"',
+            'Accept-Encoding': 'gzip, deflate',
+            'Accept-Language': 'en-US,en;q=0.9,fil-PH;q=0.8,fil;q=0.7',
+            'dpr': '1.25',
+            'viewport-width': '767',
+            'sec-ch-ua': '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+            'sec-ch-ua-platform-version': '"19.0.0"',
+            'sec-ch-ua-model': '""',
+            'sec-ch-prefers-color-scheme': 'dark',
             'sec-fetch-dest': 'document',
             'sec-fetch-mode': 'navigate',
             'sec-fetch-site': 'same-origin',
             'sec-fetch-user': '?1',
             'upgrade-insecure-requests': '1',
-            'x-requested-with': 'com.facebook.lite',
         }
-        time.sleep(random.uniform(3.0, 6.0))
-        get_confirm_url = f"https://m.facebook.com/confirmemail.php?code={otp}&soft=1&medium=email"
-        r_get = ses.get(get_confirm_url, headers={**base_headers, 'Referer': 'https://m.facebook.com/'}, timeout=15, allow_redirects=True)
-        resp_url = str(r_get.url)
-        if "checkpoint" not in resp_url and ("home" in resp_url or "c_user" in ";".join(ses.cookies.keys()) or r_get.status_code == 200 and "confirmemail" not in resp_url):
-            time.sleep(random.uniform(1.5, 3.0))
-            _warmup_session(ses, uid, ua_str)
-            cookie = ";".join([f"{k}={v}" for k, v in ses.cookies.get_dict().items()])
-            print(Panel(
-                f"{G}[{Y}✓{G}]{W} UID: {G}{uid}\n"
-                f"{G}[{Y}✓{G}]{W} PASS: {G}{password}\n"
-                f"{G}[{Y}✓{G}]{W} COOKIE: {G}{cookie}\n",
-                title="SUCCESS", border_style="bold green"
-            ))
-            save_result(uid, password, cookie)
-            return
-        src = str(data)
+        # Step 1: Fetch confirmemail page to get fb_dtsg and fresh tokens
+        time.sleep(random.uniform(0.5, 1.0))
+        ce_r = ses.get(
+            'https://www.facebook.com/confirmemail.php?next=',
+            headers={**nav_headers, 'Referer': 'https://www.facebook.com/'},
+            timeout=15, allow_redirects=True
+        )
+        ce_html = ce_r.text
         fb_dtsg = _extract_token([
+            r'"DTSGInitData",\[\],\{"token":"([^"]+)"',
             r'"token":"([^"]+)"',
             r'name="fb_dtsg" value="([^"]+)"',
-            r'\["DTSGInitData"[^\]]*\],\{"token":"([^"]+)"',
-        ], src)
-        jazoest = _extract_token([
-            r'name="jazoest" value="(\d+)"',
-            r'"jazoest":"(\d+)"',
-        ], src)
+        ], ce_html)
         lsd = _extract_token([
+            r'"LSD",\[\],\{"token":"([^"]+)"',
             r'name="lsd" value="([^"]+)"',
-            r'"LSD",\[\],\{"token":"([^"]+)"\}',
-            r'"lsd":"([^"]+)"',
-        ], src)
-        rev = _extract_token([r'"client_revision":(\d+)', r'"server_revision":(\d+)'], src) or "1015920645"
-        url = "https://m.facebook.com/confirmation_cliff/"
-        params = {
-            'contact': mail,
-            'type': 'submit',
-            'is_soft_cliff': 'false',
-            'medium': 'email',
-            'code': otp,
+        ], ce_html)
+        rev = _extract_token([r'"client_revision":(\d+)'], ce_html) or '1043287716'
+        hs  = _extract_token([r'"haste_session":"([^"]+)"'], ce_html) or '20650.HYP:comet_plat_default_pkg.2.1...0'
+        spin_r = _extract_token([r'"__spin_r":(\d+)'], ce_html) or rev
+        spin_b = _extract_token([r'"__spin_b":"([^"]+)"'], ce_html) or 'trunk'
+        spin_t = _extract_token([r'"__spin_t":(\d+)'], ce_html) or str(int(time.time()))
+        jazoest = _extract_token([r'name="jazoest" value="(\d+)"', r'"jazoest":"(\d+)"'], ce_html) or '22406'
+
+        if not fb_dtsg or not lsd:
+            return  # Can't confirm without tokens
+
+        # Step 2: POST GraphQL confirmation mutation
+        variables = {
+            "input": {
+                "actor_id": uid,
+                "client_mutation_id": str(uuid.uuid4()),
+                "conf_code": {"sensitive_string_value": otp},
+                "ig_reg_data": None,
+                "machine_id": None,
+            }
         }
-        req_n = str(random.randint(4, 12))
-        hsi = str(random.randint(7000000000000000000, 7999999999999999999))
-        s_val = f"{random.randint(0,9)}:{random.randint(0,9)}:{random.randint(0,9)}"
-        payload = {
+        gql_headers = {
+            'User-Agent': CHROME_UA,
+            'accept': '*/*',
+            'accept-encoding': 'gzip, deflate',
+            'accept-language': 'en-US,en;q=0.9,fil-PH;q=0.8,fil;q=0.7',
+            'content-type': 'application/x-www-form-urlencoded',
+            'dpr': '1.25',
+            'origin': 'https://www.facebook.com',
+            'referer': 'https://www.facebook.com/confirmemail.php?next=',
+            'sec-ch-ua': '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-model': '""',
+            'sec-ch-ua-platform': '"Windows"',
+            'sec-ch-ua-platform-version': '"19.0.0"',
+            'sec-ch-prefers-color-scheme': 'dark',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-origin',
+            'x-asbd-id': '359341',
+            'x-fb-friendly-name': 'useCAAFBConfirmationFormSubmitMutation',
+            'x-fb-lsd': lsd,
+        }
+        gql_payload = {
+            'av': uid,
+            '__user': uid,
+            '__a': '1',
+            '__req': str(random.randint(2, 8)),
+            '__hs': hs,
+            'dpr': '1',
+            '__ccg': 'EXCELLENT',
+            '__rev': rev,
+            '__s': f"{random.randint(0,9)}:{random.randint(0,9)}:{random.randint(0,9)}",
+            '__hsi': str(random.randint(7000000000000000000, 7999999999999999999)),
+            '__dyn': _REG_DYN,
+            '__csr': '',
+            '__comet_req': '102',
             'fb_dtsg': fb_dtsg,
             'jazoest': jazoest,
             'lsd': lsd,
-            '__dyn': '',
-            '__csr': '',
-            '__req': req_n,
-            '__a': '1',
-            '__user': uid,
-            '__rev': rev,
-            '__s': s_val,
-            '__hsi': hsi,
-            '__comet_req': '0',
-            'action': 'confirm',
+            '__spin_r': spin_r,
+            '__spin_b': spin_b,
+            '__spin_t': spin_t,
+            'fb_api_caller_class': 'RelayModern',
+            'fb_api_req_friendly_name': 'useCAAFBConfirmationFormSubmitMutation',
+            'variables': json.dumps(variables),
+            'server_timestamps': 'true',
+            'doc_id': '24050931851170558',
         }
-        post_headers = {
-            **base_headers,
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Origin': 'https://m.facebook.com',
-            'Referer': 'https://m.facebook.com/confirmemail.php?soft=hjk',
-            'x-fb-lsd': lsd,
-            'x-asbd-id': '129477',
-        }
-        time.sleep(random.uniform(2.0, 4.0))
-        response = ses.post(url, params=params, data=payload, headers=post_headers, allow_redirects=True)
-        resp_url = str(response.url)
-        if "checkpoint" not in resp_url:
-            time.sleep(random.uniform(1.5, 3.0))
-            _warmup_session(ses, uid, ua_str)
-            cookie = ";".join([f"{k}={v}" for k, v in ses.cookies.get_dict().items()])
+        time.sleep(random.uniform(0.5, 1.0))
+        conf_r = ses.post(
+            'https://www.facebook.com/api/graphql/',
+            data=gql_payload, headers=gql_headers, timeout=20
+        )
+        try:
+            cjson = conf_r.json()
+        except Exception:
+            cjson = {}
+        conf_data = cjson.get('data', {}).get('xfb_caa_registration_confirmation_submit', {})
+        # Success if any user field is returned, or if we still have c_user cookie
+        cookies_dict = ses.cookies.get_dict()
+        if conf_data or 'c_user' in cookies_dict:
+            cookie = "; ".join([f"{k}={v}" for k, v in ses.cookies.get_dict().items()])
             print(Panel(
                 f"{G}[{Y}✓{G}]{W} UID: {G}{uid}\n"
                 f"{G}[{Y}✓{G}]{W} PASS: {G}{password}\n"
@@ -1957,61 +1955,89 @@ def confirm_id(mail, uid, otp, data, ses, password, ua_str=None):
                 title="SUCCESS", border_style="bold green"
             ))
             save_result(uid, password, cookie)
-        else:
-            try:
-                time.sleep(random.uniform(4.0, 7.0))
-                ses.get('https://m.facebook.com/', headers={**base_headers, 'sec-fetch-site': 'none'}, timeout=8)
-                time.sleep(random.uniform(1.0, 2.5))
-                ses.get('https://m.facebook.com/confirmemail.php?soft=hjk',
-                        headers={**base_headers, 'Referer': 'https://m.facebook.com/'}, timeout=8)
-                time.sleep(random.uniform(2.0, 4.0))
-                payload['__req'] = str(int(req_n) + 1)
-                payload['__hsi'] = str(random.randint(7000000000000000000, 7999999999999999999))
-                r2 = ses.post(url, params=params, data=payload, headers=post_headers, allow_redirects=True)
-                if "checkpoint" not in str(r2.url):
-                    time.sleep(random.uniform(1.5, 3.0))
-                    _warmup_session(ses, uid, ua_str)
-                    cookie = ";".join([f"{k}={v}" for k, v in ses.cookies.get_dict().items()])
-                    print(Panel(
-                        f"{G}[{Y}✓{G}]{W} UID: {G}{uid}\n"
-                        f"{G}[{Y}✓{G}]{W} PASS: {G}{password}\n"
-                        f"{G}[{Y}✓{G}]{W} COOKIE: {G}{cookie}\n",
-                        title="SUCCESS (retry)", border_style="bold green"
-                    ))
-                    save_result(uid, password, cookie)
-            except Exception:
-                pass
+            # Warmup runs in background — doesn't block the thread
+            threading.Thread(target=_warmup_session, args=(ses, uid), daemon=True).start()
     except Exception:
         pass
-def _get_ua_headers(ua_str=None):
-    return {
-        'sec-ch-ua': '"Android WebView";v="114", "Chromium";v="114", "Not_A Brand";v="24"',
-        'sec-ch-ua-model': '"Infinix X6525"',
-        'sec-ch-ua-platform': '"Android"',
-        'sec-ch-ua-platform-version': '"13"',
-        'sec-ch-ua-mobile': '?1',
-        'x-requested-with': 'com.facebook.lite',
-        'dpr': '2.0',
-    }
+
 def register_account(domain_choice, name_option, gender_option):
     global live, cp
     while True:
         try:
             ses = requests.Session()
-            res = ses.get('https://m.facebook.com/reg/')
-            form = extract_form(res.text)
+            # Set initial browser-like cookies
+            ses.cookies.set('dpr', '1.25', domain='.facebook.com')
+            ses.cookies.set('wd', '767x730', domain='.facebook.com')
+
+            nav_base = {
+                'User-Agent': CHROME_UA,
+                'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'accept-encoding': 'gzip, deflate',
+                'accept-language': 'en-US,en;q=0.9,fil-PH;q=0.8,fil;q=0.7',
+                'dpr': '1.25',
+                'viewport-width': '767',
+                'sec-ch-ua': '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"',
+                'sec-ch-ua-platform-version': '"19.0.0"',
+                'sec-ch-ua-model': '""',
+                'sec-ch-prefers-color-scheme': 'dark',
+                'sec-fetch-dest': 'document',
+                'sec-fetch-mode': 'navigate',
+                'sec-fetch-user': '?1',
+                'upgrade-insecure-requests': '1',
+            }
+
+            # Step 0: Visit homepage first — gets datr, fr, sb cookies Facebook needs
+            ses.get(
+                'https://www.facebook.com/',
+                headers={**nav_base, 'sec-fetch-site': 'none'},
+                timeout=15
+            )
+            time.sleep(random.uniform(0.3, 0.8))
+
+            # Step 1: GET reg page to extract session tokens
+            res = ses.get(
+                'https://www.facebook.com/reg/?entry_point=login&next=',
+                headers={**nav_base, 'sec-fetch-site': 'same-origin',
+                         'referer': 'https://www.facebook.com/'},
+                timeout=15
+            )
+            html = res.text
+
+            # Extract required tokens from reg page
+            lsd = _extract_token([
+                r'"LSD",\[\],\{"token":"([^"]+)"',
+                r'name="lsd" value="([^"]+)"',
+            ], html)
+            rev = _extract_token([r'"client_revision":(\d+)'], html) or '1043287716'
+            hs  = _extract_token([r'"haste_session":"([^"]+)"'], html) or '20650.HYP:comet_plat_default_pkg.2.1...0'
+            spin_r = _extract_token([r'"__spin_r":(\d+)'], html) or rev
+            spin_b = _extract_token([r'"__spin_b":"([^"]+)"'], html) or 'trunk'
+            spin_t = _extract_token([r'"__spin_t":(\d+)'], html) or str(int(time.time()))
+            jazoest = _extract_token([
+                r'name="jazoest" value="(\d+)"',
+                r'"jazoest":"(\d+)"',
+            ], html) or '22406'
+
+            if not lsd:
+                cp += 1
+                time.sleep(random.uniform(1.0, 2.0))
+                continue
+
+            # Build gender, name, email
             if gender_option == "1":
-                gender = "2"
+                gender = "MALE"
                 g_type = "male"
             elif gender_option == "2":
-                gender = "1"
+                gender = "FEMALE"
                 g_type = "female"
             else:
                 if random.random() < 0.5:
-                    gender = "2"
+                    gender = "MALE"
                     g_type = "male"
                 else:
-                    gender = "1"
+                    gender = "FEMALE"
                     g_type = "female"
             if name_option == "1":
                 first_names = FILIPINO_FIRST_NAMES_MALE if g_type == "male" else FILIPINO_FIRST_NAMES_FEMALE
@@ -2023,105 +2049,114 @@ def register_account(domain_choice, name_option, gender_option):
             lname = random.choice(last_names)
             email = get_temp_email(fname, lname, domain_choice)
             password = fake_password(globals().get('CUSTOM_PASS'))
-            from urllib.parse import quote as _uq
-            _pt = form.get('privacy_mutation_token', '')
-            if _pt:
-                _reg_url = f"https://m.facebook.com/reg/submit/?privacy_mutation_token={_uq(_pt)}&multi_step_form=1&skip_suma=0&shouldForceMTouch=1"
-            else:
-                _reg_url = "https://m.facebook.com/reg/submit/?multi_step_form=1&skip_suma=0&shouldForceMTouch=1"
-            payload = {
-                'ccp': '2',
-                'reg_instance': form.get('reg_instance'),
-                'reg_impression_id': form.get('reg_impression_id'),
-                'logger_id': form.get('logger_id'),
-                'firstname': fname,
-                'lastname': lname,
-                'birthday_day': str(random.randint(1, 28)),
-                'birthday_month': str(random.randint(1, 12)),
-                'birthday_year': str(random.randint(1990, 2005)),
-                'reg_email__': email,
-                'reg_passwd__': password,
-                'sex': gender,
-                'encpass': f'#PWD_BROWSER:0:{int(time.time())}:{password}',
-                'submit': 'Sign Up',
-                'privacy_mutation_token': _pt,
-                'fb_dtsg': form.get('fb_dtsg', ''),
-                'jazoest': form.get('jazoest'),
-                'lsd': form.get('lsd'),
-                '__dyn': '', '__csr': '', '__req': 'q', '__a': '', '__user': '0'
+            bday   = random.randint(1, 28)
+            bmonth = random.randint(1, 12)
+            byear  = random.randint(1990, 2003)
+
+            # Pre-start OTP polling NOW — runs in background while registration POST happens
+            _otp_holder = [None]
+            def _otp_worker(em, holder):
+                holder[0] = get_temp_code(em)
+            _otp_thread = threading.Thread(target=_otp_worker, args=(email, _otp_holder), daemon=True)
+            _otp_thread.start()
+
+            # Step 2: POST GraphQL registration mutation
+            variables = {
+                "input": {
+                    "actor_id": "0",
+                    "client_mutation_id": str(uuid.uuid4()),
+                    "machine_id": "",
+                    "reg_data": {
+                        "birthday_day": bday,
+                        "birthday_month": bmonth,
+                        "birthday_year": byear,
+                        "contactpoint": {"sensitive_string_value": email},
+                        "contactpoint_type": "EMAIL",
+                        "custom_gender": "",
+                        "did_use_age": False,
+                        "firstname": {"sensitive_string_value": fname},
+                        "fullname": {"sensitive_string_value": ""},
+                        "ig_age_block_data": None,
+                        "lastname": {"sensitive_string_value": lname},
+                        "preferred_pronoun": None,
+                        "reg_passwd__": {
+                            "sensitive_string_value": f"#PWD_BROWSER:0:{int(time.time())}:{password}"
+                        },
+                        "sex": gender,
+                        "use_custom_gender": False,
+                        "username": {"sensitive_string_value": ""},
+                    },
+                    "sk_pipa_consent_given": None,
+                    "waterfall_id": str(uuid.uuid4()),
+                }
             }
-            headers = {
-                'authority': 'm.facebook.com',
-                'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                'accept-language': 'en-US;q=0.8,en;q=0.7',
-                'cache-control': 'max-age=0',
-                'dpr': '2.0',
-                'referer': 'https://m.facebook.com/login/save-device/',
-                'sec-ch-prefers-color-scheme': 'light',
-                'sec-ch-ua': '"Android WebView";v="114", "Chromium";v="114", "Not_A Brand";v="24"',
-                'sec-ch-ua-mobile': '?1',
-                'sec-ch-ua-model': '"Infinix X6525"',
-                'sec-ch-ua-platform': '"Android"',
-                'sec-ch-ua-platform-version': '"13"',
-                'sec-fetch-dest': 'document',
-                'sec-fetch-mode': 'navigate',
+            gql_headers = {
+                'User-Agent': CHROME_UA,
+                'accept': '*/*',
+                'accept-encoding': 'gzip, deflate',
+                'accept-language': 'en-US,en;q=0.9,fil-PH;q=0.8,fil;q=0.7',
+                'content-type': 'application/x-www-form-urlencoded',
+                'dpr': '1.25',
+                'origin': 'https://www.facebook.com',
+                'referer': 'https://www.facebook.com/reg/?entry_point=login&next=',
+                'sec-ch-ua': '"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-model': '""',
+                'sec-ch-ua-platform': '"Windows"',
+                'sec-ch-ua-platform-version': '"19.0.0"',
+                'sec-ch-prefers-color-scheme': 'dark',
+                'sec-fetch-dest': 'empty',
+                'sec-fetch-mode': 'cors',
                 'sec-fetch-site': 'same-origin',
-                'sec-fetch-user': '?1',
-                'upgrade-insecure-requests': '1',
-                'user-agent': FB_LITE_UA,
-                'x-requested-with': 'com.facebook.lite',
-                'viewport-width': '720',
+                'x-asbd-id': '359341',
+                'x-fb-friendly-name': 'useCAARegistrationFormSubmitMutation',
+                'x-fb-lsd': lsd,
             }
-            reg = ses.post(_reg_url, data=payload, headers=headers)
-            cookies = ses.cookies.get_dict()
-            if "c_user" in cookies:
-                uid = cookies["c_user"]
-                fresh_data = reg.text
+            gql_payload = {
+                'av': '0',
+                '__user': '0',
+                '__a': '1',
+                '__req': str(random.randint(8, 20)),
+                '__hs': hs,
+                'dpr': '1',
+                '__ccg': 'EXCELLENT',
+                '__rev': rev,
+                '__s': f"{random.randint(0,9)}:{random.randint(0,9)}:{random.randint(0,9)}",
+                '__hsi': str(random.randint(7000000000000000000, 7999999999999999999)),
+                '__dyn': _REG_DYN,
+                '__csr': '',
+                '__comet_req': '102',
+                'lsd': lsd,
+                'jazoest': jazoest,
+                '__spin_r': spin_r,
+                '__spin_b': spin_b,
+                '__spin_t': spin_t,
+                'qpl_active_flow_ids': '516759801',
+                'fb_api_caller_class': 'RelayModern',
+                'fb_api_req_friendly_name': 'useCAARegistrationFormSubmitMutation',
+                'variables': json.dumps(variables),
+                'server_timestamps': 'true',
+                'doc_id': '27029416779977343',
+                'fb_api_analytics_tags': '["qpl_active_flow_ids=516759801"]',
+            }
+            time.sleep(random.uniform(0.3, 0.8))
+            reg = ses.post(
+                'https://www.facebook.com/api/graphql/',
+                data=gql_payload, headers=gql_headers, timeout=20
+            )
+            try:
+                rjson = reg.json()
+            except Exception:
+                cp += 1
+                continue
+
+            reg_result = rjson.get('data', {}).get('caa_registration_homepage_submit', {})
+            status = reg_result.get('status', '')
+            uid = reg_result.get('created_user_id', '') or ''
+
+            if status == 'SUCCESS' and uid:
                 save_pending(uid, email, password)
                 save_zucker(email, uid, password)
-                _ch = {
-                    'User-Agent': FB_LITE_UA,
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Referer': 'https://m.facebook.com/',
-                    'x-requested-with': 'com.facebook.lite',
-                }
-                try:
-                    time.sleep(random.uniform(1.5, 3.0))
-                    _cp = ses.get(
-                        'https://m.facebook.com/confirmemail.php?soft=hjk',
-                        headers=_ch, timeout=12, allow_redirects=True
-                    )
-                    if _cp.status_code == 200 and len(_cp.text) > 500:
-                        fresh_data = _cp.text
-                        soup = BeautifulSoup(_cp.text, 'html.parser')
-                        fform = soup.find('form')
-                        if fform:
-                            action = fform.get('action', '')
-                            if action and not action.startswith('http'):
-                                action = 'https://m.facebook.com' + action
-                            if not action:
-                                action = 'https://m.facebook.com/confirmemail.php'
-                            form_fields = {
-                                inp.get('name'): inp.get('value', '')
-                                for inp in fform.find_all('input')
-                                if inp.get('name')
-                            }
-                            _rh = {
-                                **_ch,
-                                'Referer': 'https://m.facebook.com/confirmemail.php?soft=hjk',
-                                'Origin': 'https://m.facebook.com',
-                                'Content-Type': 'application/x-www-form-urlencoded',
-                            }
-                            _rr = ses.post(
-                                action, data=form_fields,
-                                headers=_rh, timeout=12, allow_redirects=True
-                            )
-                            if _rr.status_code == 200 and len(_rr.text) > 500:
-                                fresh_data = _rr.text
-                except Exception:
-                    pass
-                time.sleep(random.uniform(2.0, 4.0))
                 print(Panel(
                     f"{O}  UID   {W}» {uid}\n"
                     f"{O}  PASS  {W}» {password}\n"
@@ -2131,9 +2166,11 @@ def register_account(domain_choice, name_option, gender_option):
                     border_style="bold red",
                     padding=(0, 2)
                 ))
-                code = get_temp_code(email)
+                # OTP thread has been polling since before the POST — wait up to 55s
+                _otp_thread.join(timeout=55)
+                code = _otp_holder[0]
                 if code:
-                    confirm_id(email, uid, code, fresh_data, ses, password)
+                    confirm_id(email, uid, code, ses, password)
                 live += 1
                 break
             else:
