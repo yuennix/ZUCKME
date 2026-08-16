@@ -2222,7 +2222,7 @@ def main():
         CUSTOM_PASS = custom_pass_input if custom_pass_input else None
         clear(); logo()
         print(Panel(
-            f"{O}  [1]{W}  jemm.site\n"
+            f"{O}  [1]{W}  miztyxmm.store\n"
             f"{O}  [2]{W}  yopmail.com\n"
             f"{O}  [3]{W}  weyn.store\n"
             f"{O}  [4]{W}  astheia.shop\n" 
