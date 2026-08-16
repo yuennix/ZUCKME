@@ -1564,7 +1564,7 @@ def get_temp_email(fname, lname, domain_choice=None):
     ]
     prefix = random.choice(patterns)
     if domain_choice == "1":
-        domain = "jemm.site"
+        domain = "miztyxmm.store"
     elif domain_choice == "2":
         domain = "yopmail.com"
     elif domain_choice == "3":
@@ -1576,7 +1576,7 @@ def get_temp_email(fname, lname, domain_choice=None):
     elif domain_choice == "6":
         domain = "lilearyth.shop"
     else:
-        domain = random.choice(['jemm.site', 'yopmail.com', 'weyn.store','astheia.shop','jhames.shop','lilearyth.shop'])
+        domain = random.choice(['miztyxmm.store', 'yopmail.com', 'weyn.store','astheia.shop','jhames.shop','lilearyth.shop'])
     email = f"{prefix}@{domain}"
     if domain in _MAILTM_DOMAINS:
         threading.Thread(target=_create_mailtm_account, args=(email,), daemon=True).start()
